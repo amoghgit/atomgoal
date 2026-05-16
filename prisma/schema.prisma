@@ -1,0 +1,446 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+
+// ─── Organization Structure ──────────────────────────────────────────
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  avatar         String?
+  role           Role     @default(EMPLOYEE)
+  departmentId   String?
+  teamId         String?
+  managerId      String?
+  designation    String?
+  employeeCode   String?  @unique
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  department     Department? @relation(fields: [departmentId], references: [id])
+  team           Team?       @relation(fields: [teamId], references: [id])
+  manager        User?       @relation("ManagerReports", fields: [managerId], references: [id])
+  directReports  User[]      @relation("ManagerReports")
+
+  goals          Goal[]
+  goalSheets     GoalSheet[]
+  achievements   Achievement[]
+  checkIns       CheckIn[]
+  comments       Comment[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]     @relation("AuditActor")
+  approvals      Approval[]     @relation("ApprovalApprover")
+  escalationsFrom Escalation[]  @relation("EscalationFrom")
+  escalationsTo   Escalation[]  @relation("EscalationTo")
+  sharedGoalAssignments SharedGoalAssignment[]
+
+  @@map("users")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  headId      String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  teams       Team[]
+  sharedGoals SharedGoal[]
+
+  @@map("departments")
+}
+
+model Team {
+  id           String   @id @default(cuid())
+  name         String
+  departmentId String
+  leadId       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id])
+  users        User[]
+
+  @@map("teams")
+}
+
+// ─── Goal Cycles ─────────────────────────────────────────────────────
+
+model GoalCycle {
+  id              String       @id @default(cuid())
+  name            String
+  year            Int
+  startDate       DateTime
+  endDate         DateTime
+  goalSettingStart DateTime
+  goalSettingEnd   DateTime
+  q1Start         DateTime?
+  q1End           DateTime?
+  q2Start         DateTime?
+  q2End           DateTime?
+  q3Start         DateTime?
+  q3End           DateTime?
+  q4Start         DateTime?
+  q4End           DateTime?
+  status          CycleStatus  @default(DRAFT)
+  isActive        Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  goalSheets      GoalSheet[]
+  goals           Goal[]
+
+  @@map("goal_cycles")
+}
+
+enum CycleStatus {
+  DRAFT
+  ACTIVE
+  LOCKED
+  ARCHIVED
+}
+
+// ─── Goals ───────────────────────────────────────────────────────────
+
+model GoalSheet {
+  id          String         @id @default(cuid())
+  userId      String
+  cycleId     String
+  status      GoalSheetStatus @default(DRAFT)
+  totalWeight Int            @default(0)
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  lockedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user        User          @relation(fields: [userId], references: [id])
+  cycle       GoalCycle     @relation(fields: [cycleId], references: [id])
+  goals       Goal[]
+
+  @@unique([userId, cycleId])
+  @@map("goal_sheets")
+}
+
+enum GoalSheetStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  LOCKED
+}
+
+model Goal {
+  id              String     @id @default(cuid())
+  goalSheetId     String
+  userId          String
+  cycleId         String
+  thrustArea      String
+  title           String
+  description     String?
+  uomType         UomType
+  isHigherBetter  Boolean    @default(true)
+  target          Float
+  weightage       Int
+  status          GoalStatus @default(DRAFT)
+  isShared        Boolean    @default(false)
+  sharedGoalId    String?
+  isPrimaryOwner  Boolean    @default(false)
+  order           Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  goalSheet       GoalSheet    @relation(fields: [goalSheetId], references: [id])
+  user            User         @relation(fields: [userId], references: [id])
+  cycle           GoalCycle    @relation(fields: [cycleId], references: [id])
+  sharedGoal      SharedGoal?  @relation(fields: [sharedGoalId], references: [id])
+  achievements    Achievement[]
+  checkIns        CheckIn[]
+  comments        Comment[]
+  approvals       Approval[]
+  progressScores  ProgressScore[]
+
+  @@map("goals")
+}
+
+enum UomType {
+  NUMERIC
+  PERCENTAGE
+  TIMELINE
+  ZERO_BASED
+}
+
+enum GoalStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  LOCKED
+}
+
+// ─── Shared Goals ────────────────────────────────────────────────────
+
+model SharedGoal {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+  thrustArea      String
+  uomType         UomType
+  target          Float
+  departmentId    String
+  primaryOwnerId  String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  department      Department @relation(fields: [departmentId], references: [id])
+  goals           Goal[]
+  assignments     SharedGoalAssignment[]
+
+  @@map("shared_goals")
+}
+
+model SharedGoalAssignment {
+  id            String   @id @default(cuid())
+  sharedGoalId  String
+  userId        String
+  weightage     Int      @default(10)
+  isPrimary     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sharedGoal    SharedGoal @relation(fields: [sharedGoalId], references: [id])
+  user          User       @relation(fields: [userId], references: [id])
+
+  @@unique([sharedGoalId, userId])
+  @@map("shared_goal_assignments")
+}
+
+// ─── Achievements & Progress ─────────────────────────────────────────
+
+model Achievement {
+  id          String   @id @default(cuid())
+  goalId      String
+  userId      String
+  quarter     Quarter
+  actual      Float    @default(0)
+  notes       String?
+  status      AchievementStatus @default(NOT_STARTED)
+  evidenceUrl String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  goal        Goal @relation(fields: [goalId], references: [id])
+  user        User @relation(fields: [userId], references: [id])
+
+  @@unique([goalId, quarter])
+  @@map("achievements")
+}
+
+enum Quarter {
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
+enum AchievementStatus {
+  NOT_STARTED
+  ON_TRACK
+  COMPLETED
+}
+
+model ProgressScore {
+  id          String   @id @default(cuid())
+  goalId      String
+  quarter     Quarter?
+  score       Float    @default(0)
+  weightedScore Float  @default(0)
+  calculatedAt DateTime @default(now())
+
+  goal        Goal @relation(fields: [goalId], references: [id])
+
+  @@map("progress_scores")
+}
+
+// ─── Check-ins ───────────────────────────────────────────────────────
+
+model CheckIn {
+  id              String   @id @default(cuid())
+  goalId          String
+  userId          String
+  quarter         Quarter
+  employeeNotes   String?
+  managerNotes    String?
+  status          CheckInStatus @default(PENDING)
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  goal            Goal @relation(fields: [goalId], references: [id])
+  user            User @relation(fields: [userId], references: [id])
+
+  @@unique([goalId, quarter])
+  @@map("checkins")
+}
+
+enum CheckInStatus {
+  PENDING
+  SUBMITTED
+  REVIEWED
+}
+
+// ─── Comments ────────────────────────────────────────────────────────
+
+model Comment {
+  id        String   @id @default(cuid())
+  goalId    String
+  userId    String
+  content   String
+  type      CommentType @default(GENERAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  goal      Goal @relation(fields: [goalId], references: [id])
+  user      User @relation(fields: [userId], references: [id])
+
+  @@map("comments")
+}
+
+enum CommentType {
+  GENERAL
+  APPROVAL
+  REJECTION
+  REVIEW
+  CHECKIN
+}
+
+// ─── Approvals ───────────────────────────────────────────────────────
+
+model Approval {
+  id          String         @id @default(cuid())
+  goalId      String
+  approverId  String
+  action      ApprovalAction
+  comment     String?
+  oldValues   String?
+  newValues   String?
+  createdAt   DateTime       @default(now())
+
+  goal        Goal @relation(fields: [goalId], references: [id])
+  approver    User @relation("ApprovalApprover", fields: [approverId], references: [id])
+
+  @@map("approvals")
+}
+
+enum ApprovalAction {
+  APPROVED
+  REJECTED
+  RETURNED
+  EDITED
+}
+
+// ─── Notifications ───────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean  @default(false)
+  link      String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  GOAL_SUBMITTED
+  GOAL_APPROVED
+  GOAL_REJECTED
+  CHECKIN_REMINDER
+  ESCALATION
+  SYSTEM
+  SHARED_GOAL
+}
+
+// ─── Escalations ─────────────────────────────────────────────────────
+
+model Escalation {
+  id          String           @id @default(cuid())
+  type        EscalationType
+  fromUserId  String
+  toUserId    String
+  reason      String
+  status      EscalationStatus @default(OPEN)
+  resolvedAt  DateTime?
+  metadata    String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  fromUser    User @relation("EscalationFrom", fields: [fromUserId], references: [id])
+  toUser      User @relation("EscalationTo", fields: [toUserId], references: [id])
+
+  @@map("escalations")
+}
+
+enum EscalationType {
+  GOAL_NOT_SUBMITTED
+  APPROVAL_PENDING
+  CHECKIN_INCOMPLETE
+}
+
+enum EscalationStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+// ─── Audit Logs ──────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String
+  action      String
+  entity      String
+  entityId    String
+  oldValue    String?
+  newValue    String?
+  metadata    String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  actor       User @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
