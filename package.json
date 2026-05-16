@@ -12,7 +12,8 @@
     "db:migrate": "npx prisma migrate dev",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:studio": "npx prisma studio",
-    "db:setup": "npx prisma db push && npx tsx prisma/seed.ts"
+    "db:setup": "npx prisma db push && npx tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
